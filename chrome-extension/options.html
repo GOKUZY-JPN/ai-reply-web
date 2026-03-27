@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Reply Helper Settings</title>
+    <style>
+      body {
+        max-width: 720px;
+        margin: 32px auto;
+        padding: 0 20px 40px;
+        background: #f6f2ea;
+        color: #1f2937;
+        font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+      }
+      h1 {
+        margin-bottom: 8px;
+      }
+      p {
+        color: #4b5563;
+      }
+      label {
+        display: block;
+        margin: 18px 0 10px;
+        font-size: 14px;
+      }
+      input,
+      textarea {
+        width: 100%;
+        box-sizing: border-box;
+        border: 1px solid #d1d5db;
+        border-radius: 12px;
+        padding: 12px;
+        background: #fffdf8;
+        font: inherit;
+      }
+      textarea {
+        min-height: 140px;
+        resize: vertical;
+      }
+      button {
+        margin-top: 20px;
+        border: 0;
+        border-radius: 12px;
+        padding: 12px 18px;
+        background: #d97706;
+        color: #fff;
+        font: inherit;
+        cursor: pointer;
+      }
+      #status {
+        margin-left: 12px;
+        color: #6b7280;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>AI Reply Helper Settings</h1>
+    <p>OpenAI API key と返信スタイルを保存します。</p>
+
+    <label for="openaiApiKey">OpenAI API Key</label>
+    <input id="openaiApiKey" type="password" placeholder="sk-..." />
+
+    <label for="model">Model</label>
+    <input id="model" type="text" placeholder="gpt-5-mini" />
+
+    <label for="temperature">Temperature</label>
+    <input id="temperature" type="number" min="0" max="2" step="0.1" />
+
+    <label for="systemPrompt">System Prompt</label>
+    <textarea id="systemPrompt"></textarea>
+
+    <label for="referenceGuide">Reference Guide</label>
+    <textarea id="referenceGuide"></textarea>
+
+    <label for="profileAppName">App Name</label>
+    <input id="profileAppName" type="text" placeholder="Tandem" />
+
+    <label for="profileCountry">Country</label>
+    <input id="profileCountry" type="text" placeholder="Mexico" />
+
+    <label for="profilePartnerName">Partner Name</label>
+    <input id="profilePartnerName" type="text" placeholder="Liz" />
+
+    <label for="profileSequence">Sequence</label>
+    <input id="profileSequence" type="text" placeholder="1" />
+
+    <label for="conversationDatabase">Conversation Database For Current Partner</label>
+    <textarea id="conversationDatabase"></textarea>
+
+    <button id="save">保存する</button>
+    <span id="status"></span>
+
+    <script src="options.js" type="module"></script>
+  </body>
+</html>

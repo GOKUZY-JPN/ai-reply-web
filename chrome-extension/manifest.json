@@ -1,0 +1,35 @@
+{
+  "manifest_version": 3,
+  "name": "AI Reply Helper",
+  "version": "0.1.0",
+  "description": "Generate replies from selected text and insert them into a remembered input field.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://api.openai.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*/*",
+        "http://*/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "AI Reply Helper"
+  },
+  "options_page": "options.html"
+}

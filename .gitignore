@@ -1,0 +1,6 @@
+.env
+.DS_Store
+browser-profile/
+config/site_config.json
+__pycache__/
+data/

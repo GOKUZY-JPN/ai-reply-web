@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Reply Web</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --bg: #f6efe3;
+        --panel: rgba(255, 253, 248, 0.92);
+        --text: #1f2937;
+        --muted: #6b7280;
+        --line: #d8cdbd;
+        --accent: #c46b10;
+        --accent-strong: #a8550f;
+        --ok: #0f766e;
+        --error: #b91c1c;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at top right, rgba(196, 107, 16, 0.16), transparent 32%),
+          linear-gradient(180deg, #f7f1e6 0%, #f2e8d8 100%);
+        color: var(--text);
+        font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+      }
+      .page {
+        width: min(1100px, calc(100% - 24px));
+        margin: 18px auto 32px;
+      }
+      .hero {
+        padding: 18px 6px 10px;
+      }
+      h1 {
+        margin: 0 0 6px;
+        font-size: clamp(28px, 5vw, 42px);
+      }
+      .hero p {
+        margin: 0;
+        color: var(--muted);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 340px 1fr;
+        gap: 16px;
+      }
+      .panel {
+        background: var(--panel);
+        border: 1px solid rgba(216, 205, 189, 0.8);
+        border-radius: 24px;
+        padding: 18px;
+        backdrop-filter: blur(14px);
+        box-shadow: 0 18px 40px rgba(116, 88, 47, 0.08);
+      }
+      .panel h2 {
+        margin: 0 0 12px;
+        font-size: 18px;
+      }
+      .muted {
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .profile-list {
+        display: grid;
+        gap: 10px;
+        margin-bottom: 18px;
+      }
+      .profile-card {
+        display: block;
+        padding: 12px 14px;
+        border-radius: 16px;
+        border: 1px solid var(--line);
+        text-decoration: none;
+        color: inherit;
+        background: #fffdf9;
+      }
+      .profile-card.active {
+        border-color: var(--accent);
+        box-shadow: inset 0 0 0 1px rgba(196, 107, 16, 0.25);
+      }
+      .profile-card strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+      .field {
+        margin-bottom: 14px;
+      }
+      label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 13px;
+        color: #4b5563;
+      }
+      input, textarea, button {
+        width: 100%;
+        font: inherit;
+      }
+      input, textarea {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        padding: 12px 14px;
+        background: #fffdf9;
+        color: var(--text);
+      }
+      textarea {
+        min-height: 110px;
+        resize: vertical;
+      }
+      .db {
+        min-height: 210px;
+      }
+      button {
+        border: 0;
+        border-radius: 16px;
+        padding: 13px 16px;
+        background: var(--accent);
+        color: #fff;
+        font-weight: 700;
+      }
+      button.secondary {
+        background: #efe4d2;
+        color: #7c4a17;
+      }
+      .split {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .flash {
+        margin-bottom: 14px;
+        padding: 12px 14px;
+        border-radius: 16px;
+        font-size: 14px;
+      }
+      .flash.success {
+        background: rgba(15, 118, 110, 0.12);
+        color: var(--ok);
+      }
+      .flash.error {
+        background: rgba(185, 28, 28, 0.1);
+        color: var(--error);
+      }
+      .result-grid {
+        display: grid;
+        gap: 12px;
+      }
+      .chip {
+        display: inline-block;
+        padding: 7px 10px;
+        border-radius: 999px;
+        background: #efe4d2;
+        color: #7c4a17;
+        font-size: 12px;
+      }
+      @media (max-width: 820px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+        .page {
+          width: min(100%, calc(100% - 16px));
+        }
+        .panel {
+          border-radius: 20px;
+          padding: 16px;
+        }
+        .split {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="hero">
+        <h1>AI Reply Web</h1>
+        <p>スマホでも使える、相手ごとの会話DBつき返信生成サイト</p>
+      </div>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <div class="grid">
+        <aside class="panel">
+          <h2>Profiles</h2>
+          <div class="profile-list">
+            {% for profile in profiles %}
+              <a class="profile-card {% if selected_profile and profile['id'] == selected_profile['id'] %}active{% endif %}" href="{{ url_for('index', profile_id=profile['id']) }}">
+                <strong>{{ profile['partner_name'] }}</strong>
+                <div class="muted">{{ profile['app_name'] }} / {{ profile['country'] }} / No.{{ profile['sequence'] }}</div>
+                <div class="muted">{{ profile_key_fn(profile) }}</div>
+              </a>
+            {% else %}
+              <div class="muted">まだプロフィールがありません。</div>
+            {% endfor %}
+          </div>
+        </aside>
+
+        <main class="panel">
+          <h2>Partner Profile</h2>
+          <form method="post" action="{{ url_for('save_profile') }}">
+            <input type="hidden" name="profile_id" value="{{ selected_profile['id'] if selected_profile else '' }}" />
+            <div class="split">
+              <div class="field">
+                <label>App Name</label>
+                <input name="app_name" value="{{ selected_profile['app_name'] if selected_profile else 'Tandem' }}" />
+              </div>
+              <div class="field">
+                <label>Country</label>
+                <input name="country" value="{{ selected_profile['country'] if selected_profile else '' }}" />
+              </div>
+              <div class="field">
+                <label>Partner Name</label>
+                <input name="partner_name" value="{{ selected_profile['partner_name'] if selected_profile else '' }}" />
+              </div>
+              <div class="field">
+                <label>Sequence</label>
+                <input name="sequence" value="{{ selected_profile['sequence'] if selected_profile else '1' }}" />
+              </div>
+            </div>
+            <div class="field">
+              <label>Current Partner ID</label>
+              <div class="chip">{{ current_profile_key if current_profile_key else '未選択' }}</div>
+            </div>
+            <div class="field">
+              <label>Conversation Database</label>
+              <textarea class="db" name="conversation_db" placeholder="今までの会話全文をここに貼る">{{ selected_profile['conversation_db'] if selected_profile else '' }}</textarea>
+            </div>
+            <button type="submit">プロフィールを保存</button>
+          </form>
+
+          <hr style="border:none;border-top:1px solid var(--line);margin:20px 0;" />
+
+          <h2>Generate Reply</h2>
+          <form method="post" action="{{ url_for('generate') }}">
+            <input type="hidden" name="profile_id" value="{{ selected_profile['id'] if selected_profile else '' }}" />
+            <div class="field">
+              <label>Incoming Message</label>
+              <textarea name="incoming_message" placeholder="相手の新しいメッセージをコピペ">{{ incoming_message }}</textarea>
+            </div>
+            <button type="submit">返信を生成してDBに追記</button>
+          </form>
+
+          {% if result %}
+            <hr style="border:none;border-top:1px solid var(--line);margin:20px 0;" />
+            <div class="result-grid">
+              <div class="field">
+                <label>Reply</label>
+                <textarea readonly>{{ result['reply'] }}</textarea>
+              </div>
+              <div class="field">
+                <label>Japanese Translation</label>
+                <textarea readonly>{{ result['japanese_translation'] }}</textarea>
+              </div>
+            </div>
+          {% endif %}
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

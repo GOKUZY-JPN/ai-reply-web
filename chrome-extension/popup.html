@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI Reply Helper</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="panel">
+      <h1>AI Reply Helper</h1>
+      <p class="hint">1. 返信欄をクリック 2. 相手の文を選択 3. 返信生成</p>
+
+      <label class="field compact">
+        <span>現在の相手ID</span>
+        <input id="profileKey" type="text" readonly placeholder="app__country__name__1" />
+      </label>
+
+      <div class="actions">
+        <button id="rememberInput">返信欄を記憶</button>
+        <button id="captureSelection">選択文を取得</button>
+        <button id="generateReply" class="primary">返信を生成</button>
+        <button id="insertReply">入力欄に入れる</button>
+      </div>
+
+      <label class="field">
+        <span>選択したメッセージ</span>
+        <textarea id="messageText" rows="5" placeholder="ページ上の相手メッセージを選択して取得"></textarea>
+      </label>
+
+      <label class="field">
+        <span>生成された返信</span>
+        <textarea id="replyText" rows="6" placeholder="ここに返信文が入ります"></textarea>
+      </label>
+
+      <label class="field">
+        <span>日本語訳</span>
+        <textarea id="translationText" rows="5" placeholder="ここに日本語訳が入ります"></textarea>
+      </label>
+
+      <label class="field">
+        <span>会話DBプレビュー</span>
+        <textarea id="databasePreview" rows="7" placeholder="保存済みの会話DBの末尾が表示されます"></textarea>
+      </label>
+
+      <div class="footer">
+        <button id="openOptions" class="linkish">API設定</button>
+        <span id="status"></span>
+      </div>
+    </main>
+    <script src="popup.js" type="module"></script>
+  </body>
+</html>
