@@ -267,26 +267,37 @@ def save_profile():
         flash("Country と Partner Name は必須です。", "error")
         return redirect(url_for("index", profile_id=profile_id or ""))
 
-    with db_connection() as conn:
-        if profile_id:
-            conn.execute(
-                """
-                UPDATE profiles
-                SET app_name = ?, country = ?, partner_name = ?, sequence = ?, conversation_db = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
-                (app_name, country, partner_name, sequence, conversation_db, profile_id),
-            )
-        else:
-            cursor = conn.execute(
-                """
-                INSERT INTO profiles (app_name, country, partner_name, sequence, conversation_db)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (app_name, country, partner_name, sequence, conversation_db),
-            )
-            profile_id = cursor.lastrowid
-        conn.commit()
+    try:
+        with db_connection() as conn:
+            if profile_id:
+                conn.execute(
+                    """
+                    UPDATE profiles
+                    SET app_name = ?, country = ?, partner_name = ?, sequence = ?, conversation_db = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                    """,
+                    (app_name, country, partner_name, sequence, conversation_db, profile_id),
+                )
+            else:
+                cursor = conn.execute(
+                    """
+                    INSERT INTO profiles (app_name, country, partner_name, sequence, conversation_db)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (app_name, country, partner_name, sequence, conversation_db),
+                )
+                profile_id = cursor.lastrowid
+            conn.commit()
+    except sqlite3.IntegrityError:
+        flash(
+            "同じ App Name / Country / Partner Name / Sequence のプロフィールがすでにあります。Sequence を変えるか、既存プロフィールを編集してください。",
+            "error",
+        )
+        return redirect(url_for("index", profile_id=profile_id or ""))
+    except Exception:
+        app.logger.exception("Failed to save profile")
+        flash("プロフィール保存中にエラーが発生しました。Railway のログも確認してください。", "error")
+        return redirect(url_for("index", profile_id=profile_id or ""))
 
     flash("プロフィールを保存しました。", "success")
     return redirect(url_for("index", profile_id=profile_id))
