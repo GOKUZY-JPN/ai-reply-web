@@ -196,7 +196,8 @@ def build_user_prompt(profile: sqlite3.Row, incoming_message: str) -> str:
         + "必ずJSONで返し、keysは reply と japanese_translation の2つだけにしてください。"
         + "reply には相手に実際に送る文、japanese_translation にはその reply の自然な日本語訳を入れてください。"
         + "コードブロックは使わないでください。過去会話にすでに答えがあることを再度質問しないでください。"
-        + "必要なら前回の話題を自然に参照してください。自己開示する場合は、相手の話に関連する範囲だけを短く自然に入れてください。\n\n"
+        + "必要なら前回の話題を自然に参照してください。自己開示する場合は、相手の話に関連する範囲だけを短く自然に入れてください。"
+        + "質問を入れる場合は最大1つまでにしてください。複数の質問を並べないでください。\n\n"
         + f"受信メッセージ:\n{incoming_message}"
     )
 
@@ -284,7 +285,7 @@ def retranslate_from_japanese(profile: sqlite3.Row, incoming_message: str, edite
                             + "incoming message と同じ言語で自然な返信文へ再翻訳してください。"
                             + "必ずJSONで返し、keysは reply と japanese_translation の2つだけ。"
                             + "reply は相手に送る文、japanese_translation は編集後の日本語文をそのまま自然に整えたものにしてください。"
-                            + "コードブロックは禁止。\n\n"
+                            + "コードブロックは禁止。質問を入れる場合は最大1つまでにしてください。複数の質問を並べないでください。\n\n"
                             + f"incoming message:\n{incoming_message}\n\n"
                             + f"edited Japanese draft:\n{edited_japanese}"
                         ),
