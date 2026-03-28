@@ -204,24 +204,35 @@
 
         <main class="panel">
           <h2>Partner Profile</h2>
+          <form method="post" action="{{ url_for('import_profile_image') }}" enctype="multipart/form-data">
+            <input type="hidden" name="selected_profile_id" value="{{ selected_profile['id'] if selected_profile else '' }}" />
+            <div class="field">
+              <label>Import From Screenshot</label>
+              <input type="file" name="profile_image" accept="image/png,image/jpeg,image/webp,image/gif" />
+            </div>
+            <button type="submit" class="secondary">スクショからプロフィール候補を抽出</button>
+          </form>
+
+          <hr style="border:none;border-top:1px solid var(--line);margin:20px 0;" />
+
           <form method="post" action="{{ url_for('save_profile') }}">
-            <input type="hidden" name="profile_id" value="{{ selected_profile['id'] if selected_profile else '' }}" />
+            <input type="hidden" name="profile_id" value="{{ imported_profile['id'] if imported_profile else (selected_profile['id'] if selected_profile else '') }}" />
             <div class="split">
               <div class="field">
                 <label>App Name</label>
-                <input name="app_name" value="{{ selected_profile['app_name'] if selected_profile else 'Tandem' }}" />
+                <input name="app_name" value="{{ imported_profile['app_name'] if imported_profile else (selected_profile['app_name'] if selected_profile else 'Tandem') }}" />
               </div>
               <div class="field">
                 <label>Country</label>
-                <input name="country" value="{{ selected_profile['country'] if selected_profile else '' }}" />
+                <input name="country" value="{{ imported_profile['country'] if imported_profile else (selected_profile['country'] if selected_profile else '') }}" />
               </div>
               <div class="field">
                 <label>Partner Name</label>
-                <input name="partner_name" value="{{ selected_profile['partner_name'] if selected_profile else '' }}" />
+                <input name="partner_name" value="{{ imported_profile['partner_name'] if imported_profile else (selected_profile['partner_name'] if selected_profile else '') }}" />
               </div>
               <div class="field">
                 <label>Sequence</label>
-                <input name="sequence" value="{{ selected_profile['sequence'] if selected_profile else '1' }}" />
+                <input name="sequence" value="{{ imported_profile['sequence'] if imported_profile else (selected_profile['sequence'] if selected_profile else '1') }}" />
               </div>
             </div>
             <div class="field">
@@ -230,7 +241,7 @@
             </div>
             <div class="field">
               <label>Conversation Database</label>
-              <textarea class="db" name="conversation_db" placeholder="今までの会話全文をここに貼る">{{ selected_profile['conversation_db'] if selected_profile else '' }}</textarea>
+              <textarea class="db" name="conversation_db" placeholder="今までの会話全文をここに貼る">{{ imported_profile['conversation_db'] if imported_profile else (selected_profile['conversation_db'] if selected_profile else '') }}</textarea>
             </div>
             <button type="submit">プロフィールを保存</button>
           </form>

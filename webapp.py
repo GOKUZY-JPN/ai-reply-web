@@ -1,6 +1,7 @@
 import json
 import os
 import sqlite3
+import base64
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -65,6 +66,7 @@ def get_settings() -> dict:
     return {
         "api_key": os.getenv("OPENAI_API_KEY", "").strip(),
         "model": os.getenv("OPENAI_MODEL", "gpt-5-mini").strip(),
+        "vision_model": os.getenv("OPENAI_VISION_MODEL", "gpt-4.1-mini").strip(),
         "temperature": float(os.getenv("OPENAI_TEMPERATURE", "0.7")),
     }
 
@@ -222,6 +224,63 @@ def generate_reply(profile: sqlite3.Row, incoming_message: str) -> dict:
     }
 
 
+def extract_profile_from_image(image_bytes: bytes, filename: str) -> dict:
+    settings = get_settings()
+    if not settings["api_key"]:
+        raise RuntimeError("OPENAI_API_KEY が未設定です。.env を確認してください。")
+
+    suffix = Path(filename or "upload.png").suffix.lower()
+    mime_type = {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".gif": "image/gif",
+    }.get(suffix, "image/png")
+
+    image_data_url = f"data:{mime_type};base64,{base64.b64encode(image_bytes).decode('utf-8')}"
+    client = OpenAI(api_key=settings["api_key"])
+    request_payload = {
+        "model": settings["vision_model"],
+        "input": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": (
+                            "このプロフィールスクリーンショットから、プロフィール入力に必要な情報を抽出してください。"
+                            "必ずJSONで返し、keysは app_name, country, partner_name, sequence, profile_notes のみ。"
+                            "sequence は見えなければ '1'。country や app_name が推定でも分かるなら入れる。"
+                            "profile_notes には、自己紹介、言語、趣味など保存に役立つ内容を短く整理して入れる。"
+                            "分からない項目は空文字にしてください。コードブロックは禁止。"
+                        ),
+                    },
+                    {
+                        "type": "input_image",
+                        "image_url": image_data_url,
+                        "detail": "high",
+                    },
+                ],
+            }
+        ],
+    }
+    response = client.responses.create(**request_payload)
+    raw_text = response.output_text.strip()
+    try:
+        parsed = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"画像からプロフィール抽出に失敗しました: {raw_text}") from exc
+
+    return {
+        "app_name": str(parsed.get("app_name", "")).strip() or "Tandem",
+        "country": str(parsed.get("country", "")).strip(),
+        "partner_name": str(parsed.get("partner_name", "")).strip(),
+        "sequence": str(parsed.get("sequence", "")).strip() or "1",
+        "profile_notes": str(parsed.get("profile_notes", "")).strip(),
+    }
+
+
 def fetch_profiles() -> list[sqlite3.Row]:
     with db_connection() as conn:
         return conn.execute(
@@ -250,6 +309,80 @@ def index():
         incoming_message="",
         current_profile_key=profile_key(selected_profile) if selected_profile else "",
         profile_key_fn=profile_key,
+        imported_profile=None,
+    )
+
+
+@app.post("/profiles/import-image")
+def import_profile_image():
+    init_db()
+    profiles = fetch_profiles()
+    selected_id = request.form.get("selected_profile_id", type=int)
+    selected_profile = fetch_profile(selected_id) if selected_id else (profiles[0] if profiles else None)
+    uploaded_file = request.files.get("profile_image")
+
+    if not uploaded_file or not uploaded_file.filename:
+        flash("プロフィール画像のスクショを選んでください。", "error")
+        return render_template(
+            "index.html",
+            profiles=profiles,
+            selected_profile=selected_profile,
+            result=None,
+            incoming_message="",
+            current_profile_key=profile_key(selected_profile) if selected_profile else "",
+            profile_key_fn=profile_key,
+            imported_profile=None,
+        )
+
+    image_bytes = uploaded_file.read()
+    if not image_bytes:
+        flash("画像を読み込めませんでした。", "error")
+        return render_template(
+            "index.html",
+            profiles=profiles,
+            selected_profile=selected_profile,
+            result=None,
+            incoming_message="",
+            current_profile_key=profile_key(selected_profile) if selected_profile else "",
+            profile_key_fn=profile_key,
+            imported_profile=None,
+        )
+
+    try:
+        extracted = extract_profile_from_image(image_bytes, uploaded_file.filename)
+    except Exception as exc:
+        flash(str(exc), "error")
+        return render_template(
+            "index.html",
+            profiles=profiles,
+            selected_profile=selected_profile,
+            result=None,
+            incoming_message="",
+            current_profile_key=profile_key(selected_profile) if selected_profile else "",
+            profile_key_fn=profile_key,
+            imported_profile=None,
+        )
+
+    imported_profile = {
+        "id": None,
+        "app_name": extracted["app_name"],
+        "country": extracted["country"],
+        "partner_name": extracted["partner_name"],
+        "sequence": extracted["sequence"],
+        "conversation_db": f"[Profile Notes]\n{extracted['profile_notes']}".strip()
+        if extracted["profile_notes"]
+        else "",
+    }
+    flash("画像からプロフィール候補を抽出しました。内容を確認してから保存してください。", "success")
+    return render_template(
+        "index.html",
+        profiles=profiles,
+        selected_profile=selected_profile,
+        result=None,
+        incoming_message="",
+        current_profile_key=profile_key(selected_profile) if selected_profile else "",
+        profile_key_fn=profile_key,
+        imported_profile=imported_profile,
     )
 
 
@@ -316,12 +449,13 @@ def generate():
         return render_template(
             "index.html",
             profiles=profiles,
-            selected_profile=None,
-            result=None,
-            incoming_message=incoming_message,
-            current_profile_key="",
-            profile_key_fn=profile_key,
-        )
+        selected_profile=None,
+        result=None,
+        incoming_message=incoming_message,
+        current_profile_key="",
+        profile_key_fn=profile_key,
+        imported_profile=None,
+    )
 
     if not incoming_message:
         flash("相手の新しいメッセージを入力してください。", "error")
@@ -333,6 +467,7 @@ def generate():
             incoming_message="",
             current_profile_key=profile_key(selected_profile),
             profile_key_fn=profile_key,
+            imported_profile=None,
         )
 
     try:
@@ -347,6 +482,7 @@ def generate():
             incoming_message=incoming_message,
             current_profile_key=profile_key(selected_profile),
             profile_key_fn=profile_key,
+            imported_profile=None,
         )
 
     updated_db = append_conversation_turn(
@@ -376,6 +512,7 @@ def generate():
         incoming_message=incoming_message,
         current_profile_key=profile_key(selected_profile),
         profile_key_fn=profile_key,
+        imported_profile=None,
     )
 
 
