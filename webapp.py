@@ -13,6 +13,7 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "reply_site.db"
 REFERENCE_GUIDE_PATH = BASE_DIR / "prompts" / "reply_policy.txt"
+SELF_PROFILE_PATH = BASE_DIR / "prompts" / "self_profile.txt"
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are a concise, friendly assistant. Reply in the same language as the incoming message."
@@ -44,6 +45,13 @@ def load_reference_guide() -> str:
         return text or DEFAULT_REFERENCE_GUIDE
     except FileNotFoundError:
         return DEFAULT_REFERENCE_GUIDE
+
+
+def load_self_profile() -> str:
+    try:
+        return SELF_PROFILE_PATH.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return ""
 
 
 def init_db() -> None:
@@ -142,6 +150,7 @@ def append_conversation_turn(database: str, incoming_message: str, reply_text: s
 
 def build_user_prompt(profile: sqlite3.Row, incoming_message: str) -> str:
     history = trim_for_prompt(profile["conversation_db"], 12000)
+    self_profile = load_self_profile()
     history_block = ""
     if history:
         history_block = (
@@ -149,13 +158,21 @@ def build_user_prompt(profile: sqlite3.Row, incoming_message: str) -> str:
             "これを参照して、同じことを何度も聞かず、話題の連続性を保ってください。\n\n"
             f"{history}\n\n"
         )
+    self_profile_block = ""
+    if self_profile:
+        self_profile_block = (
+            "以下は自分のプロフィール情報です。自己開示が自然に役立つ場合だけ、この範囲から正確に使ってください。"
+            "書かれていない経歴や価値観を作らないでください。自己開示は短く、相手中心の会話を優先してください。\n\n"
+            f"{self_profile}\n\n"
+        )
     return (
         history_block
+        + self_profile_block
         + "以下の新しい相手メッセージに対する自然で短めの返信文を作成してください。"
         + "必ずJSONで返し、keysは reply と japanese_translation の2つだけにしてください。"
         + "reply には相手に実際に送る文、japanese_translation にはその reply の自然な日本語訳を入れてください。"
         + "コードブロックは使わないでください。過去会話にすでに答えがあることを再度質問しないでください。"
-        + "必要なら前回の話題を自然に参照してください。\n\n"
+        + "必要なら前回の話題を自然に参照してください。自己開示する場合は、相手の話に関連する範囲だけを短く自然に入れてください。\n\n"
         + f"受信メッセージ:\n{incoming_message}"
     )
 
