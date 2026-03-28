@@ -161,6 +161,17 @@ def append_conversation_turn(database: str, incoming_message: str, reply_text: s
     return updated.strip()
 
 
+def replace_last_you_block(database: str, old_reply: str, new_reply: str) -> str:
+    database = (database or "").strip()
+    old_block = f"[You]\n{normalize_block(old_reply)}".strip()
+    new_block = f"[You]\n{normalize_block(new_reply)}".strip()
+    if not database or not old_block or not new_block:
+        return database
+    if database.endswith(old_block):
+        return (database[: -len(old_block)] + new_block).strip()
+    return database
+
+
 def build_user_prompt(profile: sqlite3.Row, incoming_message: str) -> str:
     history = trim_for_prompt(profile["conversation_db"], 12000)
     self_profile = load_self_profile()
@@ -227,6 +238,74 @@ def generate_reply(profile: sqlite3.Row, incoming_message: str) -> dict:
     return {
         "reply": str(parsed.get("reply", "")).strip(),
         "japanese_translation": str(parsed.get("japanese_translation", "")).strip(),
+    }
+
+
+def retranslate_from_japanese(profile: sqlite3.Row, incoming_message: str, edited_japanese: str) -> dict:
+    settings = get_settings()
+    if not settings["api_key"]:
+        raise RuntimeError("OPENAI_API_KEY が未設定です。.env を確認してください。")
+
+    reference_guide = load_reference_guide()
+    self_profile = load_self_profile()
+    history = trim_for_prompt(profile["conversation_db"], 12000)
+    history_block = (
+        f"以下は {profile_key(profile)} との過去会話のデータベースです。\n\n{history}\n\n" if history else ""
+    )
+    self_profile_block = (
+        "以下は自分のプロフィール情報です。自己開示が必要なときだけ、この範囲から正確に使ってください。\n\n"
+        f"{self_profile}\n\n"
+        if self_profile
+        else ""
+    )
+
+    client = OpenAI(api_key=settings["api_key"])
+    request_payload = {
+        "model": settings["model"],
+        "input": [
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": DEFAULT_SYSTEM_PROMPT + "\n\n" + reference_guide,
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": (
+                            history_block
+                            + self_profile_block
+                            + "以下の incoming message に対する返信として、edited Japanese draft の意味を保ったまま、"
+                            + "incoming message と同じ言語で自然な返信文へ再翻訳してください。"
+                            + "必ずJSONで返し、keysは reply と japanese_translation の2つだけ。"
+                            + "reply は相手に送る文、japanese_translation は編集後の日本語文をそのまま自然に整えたものにしてください。"
+                            + "コードブロックは禁止。\n\n"
+                            + f"incoming message:\n{incoming_message}\n\n"
+                            + f"edited Japanese draft:\n{edited_japanese}"
+                        ),
+                    }
+                ],
+            },
+        ],
+    }
+    if supports_temperature(settings["model"]):
+        request_payload["temperature"] = settings["temperature"]
+
+    response = client.responses.create(**request_payload)
+    raw_text = response.output_text.strip()
+    try:
+        parsed = json.loads(raw_text)
+    except json.JSONDecodeError:
+        return {"reply": raw_text, "japanese_translation": edited_japanese.strip()}
+    return {
+        "reply": str(parsed.get("reply", "")).strip(),
+        "japanese_translation": str(parsed.get("japanese_translation", "")).strip()
+        or edited_japanese.strip(),
     }
 
 
@@ -510,6 +589,84 @@ def generate():
 
     selected_profile = fetch_profile(profile_id)
     flash("返信を生成し、会話DBに追記しました。", "success")
+    return render_template(
+        "index.html",
+        profiles=fetch_profiles(),
+        selected_profile=selected_profile,
+        result=result,
+        incoming_message=incoming_message,
+        current_profile_key=profile_key(selected_profile),
+        profile_key_fn=profile_key,
+        imported_profile=None,
+    )
+
+
+@app.post("/retranslate")
+def retranslate():
+    init_db()
+    profile_id = request.form.get("profile_id", type=int)
+    incoming_message = request.form.get("incoming_message", "").strip()
+    edited_japanese = request.form.get("edited_japanese", "").strip()
+    previous_reply = request.form.get("previous_reply", "").strip()
+    selected_profile = fetch_profile(profile_id)
+    profiles = fetch_profiles()
+
+    if not selected_profile:
+        flash("先にプロフィールを選択してください。", "error")
+        return render_template(
+            "index.html",
+            profiles=profiles,
+            selected_profile=None,
+            result=None,
+            incoming_message=incoming_message,
+            current_profile_key="",
+            profile_key_fn=profile_key,
+            imported_profile=None,
+        )
+
+    if not edited_japanese:
+        flash("編集後の日本語文を入力してください。", "error")
+        return render_template(
+            "index.html",
+            profiles=profiles,
+            selected_profile=selected_profile,
+            result=None,
+            incoming_message=incoming_message,
+            current_profile_key=profile_key(selected_profile),
+            profile_key_fn=profile_key,
+            imported_profile=None,
+        )
+
+    try:
+        result = retranslate_from_japanese(selected_profile, incoming_message, edited_japanese)
+    except Exception as exc:
+        flash(str(exc), "error")
+        return render_template(
+            "index.html",
+            profiles=profiles,
+            selected_profile=selected_profile,
+            result=None,
+            incoming_message=incoming_message,
+            current_profile_key=profile_key(selected_profile),
+            profile_key_fn=profile_key,
+            imported_profile=None,
+        )
+
+    updated_db = replace_last_you_block(selected_profile["conversation_db"], previous_reply, result["reply"])
+    if updated_db != selected_profile["conversation_db"]:
+        with db_connection() as conn:
+            conn.execute(
+                """
+                UPDATE profiles
+                SET conversation_db = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?
+                """,
+                (updated_db, profile_id),
+            )
+            conn.commit()
+        selected_profile = fetch_profile(profile_id)
+
+    flash("日本語の微調整内容を相手の言語へ再翻訳しました。", "success")
     return render_template(
         "index.html",
         profiles=fetch_profiles(),

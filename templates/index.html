@@ -265,9 +265,23 @@
                 <label>Reply</label>
                 <textarea readonly>{{ result['reply'] }}</textarea>
               </div>
+            </div>
+
+            <form method="post" action="{{ url_for('retranslate') }}">
+              <input type="hidden" name="profile_id" value="{{ selected_profile['id'] if selected_profile else '' }}" />
+              <input type="hidden" name="incoming_message" value="{{ incoming_message }}" />
+              <input type="hidden" name="previous_reply" value="{{ result['reply'] }}" />
               <div class="field">
                 <label>Japanese Translation</label>
-                <textarea readonly>{{ result['japanese_translation'] }}</textarea>
+                <textarea name="edited_japanese">{{ result['japanese_translation'] }}</textarea>
+              </div>
+              <button type="submit" class="secondary">日本語を微調整して再翻訳</button>
+            </form>
+
+            <div class="result-grid" style="margin-top:12px;">
+              <div class="field">
+                <label>Final Reply</label>
+                <textarea readonly>{{ result['reply'] }}</textarea>
               </div>
             </div>
           {% endif %}
