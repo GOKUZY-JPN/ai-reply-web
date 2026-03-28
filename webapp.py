@@ -12,6 +12,7 @@ from openai import OpenAI
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 DB_PATH = DATA_DIR / "reply_site.db"
+REFERENCE_GUIDE_PATH = BASE_DIR / "prompts" / "reply_policy.txt"
 
 DEFAULT_SYSTEM_PROMPT = (
     "You are a concise, friendly assistant. Reply in the same language as the incoming message."
@@ -19,41 +20,7 @@ DEFAULT_SYSTEM_PROMPT = (
 
 DEFAULT_REFERENCE_GUIDE = """【前提条件：進化心理学に基づく誠実な魅力向上とコミュニケーションのガイドライン】
 
-あなたは以下の価値観と原則を完全に身につけた、誠実で魅力的な人物です。このガイドラインに従って、相手に安心感を与え、Win-Winの関係を築くための返信やコミュニケーションを行ってください。
-
-■ 1. 基本スタンスと最終目的
-小手先の恋愛テクニックや相手を騙す手法は一切用いない。外見やテクニックに頼るのではなく、自分自身の人間的な魅力を根本から高め、良い人間関係を築ける人になることを目的とする。恋愛はゼロサムゲームではなく、双方に利益をもたらす Win-Win の関係の共創である。結果よりもプロセスを楽しむ余裕を持つこと。
-
-■ 2. 核心理念
-・バイアスではなく科学で決断する
-・相手の視点とリスクを理解し、安心感を与える
-・変えられる魅力を磨く
-・常に正直で誠実である
-・自分と相手の双方に価値のある関係を目指す
-
-■ 3. アピールすべき魅力要素
-・健康と清潔感
-・メンタルヘルスと余裕
-・知性と知的謙遜
-・意志力と一貫性
-・優しさと境界線を持った自己主張
-
-■ 4. コミュニケーションのルール
-・相手を攻略対象として扱わない
-・会話の目的は安心感と良い時間の共創
-・相手への強い好奇心を持ち、フォローアップ質問を使う
-・アクティブリスニングを意識し、承認と洞察を両立する
-・適切な自己開示を行う
-・自慢、論破、押し付け、過剰なアピールは避ける
-
-■ 5. 絶対に避けること
-・嘘や操作的テクニック
-・相手の境界線の無視
-・外見、お金、ステータスだけに依存した訴求
-・短期利益のための不誠実な振る舞い
-
-■ 6. 出力方針
-返信は短めで自然、誠実、知的、安心感があるものにする。相手の話にちゃんと反応し、必要なら軽い共感や自然な質問を1つ入れる。馴れ馴れしすぎず、下心や支配性を感じさせない。"""
+あなたは以下の価値観と原則を完全に身につけた、誠実で魅力的な人物です。このガイドラインに従って、相手に安心感を与え、Win-Winの関係を築くための返信やコミュニケーションを行ってください。"""
 
 
 load_dotenv(BASE_DIR / ".env")
@@ -69,6 +36,14 @@ def get_settings() -> dict:
         "vision_model": os.getenv("OPENAI_VISION_MODEL", "gpt-4.1-mini").strip(),
         "temperature": float(os.getenv("OPENAI_TEMPERATURE", "0.7")),
     }
+
+
+def load_reference_guide() -> str:
+    try:
+        text = REFERENCE_GUIDE_PATH.read_text(encoding="utf-8").strip()
+        return text or DEFAULT_REFERENCE_GUIDE
+    except FileNotFoundError:
+        return DEFAULT_REFERENCE_GUIDE
 
 
 def init_db() -> None:
@@ -190,6 +165,7 @@ def generate_reply(profile: sqlite3.Row, incoming_message: str) -> dict:
     if not settings["api_key"]:
         raise RuntimeError("OPENAI_API_KEY が未設定です。.env を確認してください。")
 
+    reference_guide = load_reference_guide()
     client = OpenAI(api_key=settings["api_key"])
     request_payload = {
         "model": settings["model"],
@@ -199,7 +175,7 @@ def generate_reply(profile: sqlite3.Row, incoming_message: str) -> dict:
                 "content": [
                     {
                         "type": "input_text",
-                        "text": DEFAULT_SYSTEM_PROMPT + "\n\n" + DEFAULT_REFERENCE_GUIDE,
+                        "text": DEFAULT_SYSTEM_PROMPT + "\n\n" + reference_guide,
                     }
                 ],
             },
