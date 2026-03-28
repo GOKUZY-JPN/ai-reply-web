@@ -132,6 +132,7 @@ OPENAI_MODEL=gpt-5-mini
 OPENAI_VISION_MODEL=gpt-4.1-mini
 OPENAI_TEMPERATURE=0.7
 FLASK_SECRET_KEY=十分長いランダム文字列
+DATABASE_PATH=/data/reply_site.db
 ```
 
 5. 必要なら Railway 側の Start Command を `gunicorn webapp:app --bind 0.0.0.0:$PORT` にする
@@ -142,6 +143,22 @@ FLASK_SECRET_KEY=十分長いランダム文字列
 - API キーは GitHub に入れない
 - `.env` はローカル専用にする
 - 本番では Railway の Variables にだけ保存する
+
+### データ永続化
+
+Railway でプロフィールDBが消える場合は、コンテナ内のローカルファイルを使っているのが原因です。いちばん簡単なのは **Railway Volume + SQLite のまま永続化** です。
+
+1. Railway で Volume を追加する
+2. たとえば `/data` にマウントする
+3. Variables に以下を入れる
+
+```text
+DATABASE_PATH=/data/reply_site.db
+```
+
+これで SQLite ファイルが Volume 上に保存され、再デプロイ後も残ります。
+
+Google Sheets よりこの方法の方が簡単です。構成もほぼ変えず、今の Web アプリのまま使えます。
 
 ### スクショからプロフィール取り込み
 

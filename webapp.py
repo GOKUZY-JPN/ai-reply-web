@@ -10,8 +10,6 @@ from openai import OpenAI
 
 
 BASE_DIR = Path(__file__).resolve().parent
-DATA_DIR = BASE_DIR / "data"
-DB_PATH = DATA_DIR / "reply_site.db"
 REFERENCE_GUIDE_PATH = BASE_DIR / "prompts" / "reply_policy.txt"
 SELF_PROFILE_PATH = BASE_DIR / "prompts" / "self_profile.txt"
 
@@ -28,6 +26,21 @@ load_dotenv(BASE_DIR / ".env")
 
 app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-key")
+
+
+def resolve_db_path() -> Path:
+    explicit = os.getenv("DATABASE_PATH", "").strip()
+    if explicit:
+        return Path(explicit)
+
+    railway_mount = os.getenv("RAILWAY_VOLUME_MOUNT_PATH", "").strip()
+    if railway_mount:
+        return Path(railway_mount) / "reply_site.db"
+
+    return BASE_DIR / "data" / "reply_site.db"
+
+
+DB_PATH = resolve_db_path()
 
 
 def get_settings() -> dict:
@@ -55,7 +68,7 @@ def load_self_profile() -> str:
 
 
 def init_db() -> None:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute(
             """
