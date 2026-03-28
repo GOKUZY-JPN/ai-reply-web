@@ -1,12 +1,14 @@
 import json
 import os
-import sqlite3
 import base64
 from pathlib import Path
 
 from dotenv import load_dotenv
 from flask import Flask, flash, redirect, render_template, request, url_for
 from openai import OpenAI
+from sqlalchemy import DateTime, Integer, String, Text, UniqueConstraint, create_engine, func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -28,19 +30,50 @@ app = Flask(__name__)
 app.secret_key = os.getenv("FLASK_SECRET_KEY", "dev-secret-key")
 
 
-def resolve_db_path() -> Path:
+def resolve_database_url() -> str:
+    database_url = os.getenv("DATABASE_URL", "").strip()
+    if database_url:
+        if database_url.startswith("postgres://"):
+            return "postgresql+psycopg://" + database_url[len("postgres://") :]
+        if database_url.startswith("postgresql://"):
+            return "postgresql+psycopg://" + database_url[len("postgresql://") :]
+        return database_url
+
     explicit = os.getenv("DATABASE_PATH", "").strip()
     if explicit:
-        return Path(explicit)
+        return f"sqlite:///{Path(explicit)}"
 
     railway_mount = os.getenv("RAILWAY_VOLUME_MOUNT_PATH", "").strip()
     if railway_mount:
-        return Path(railway_mount) / "reply_site.db"
+        return f"sqlite:///{Path(railway_mount) / 'reply_site.db'}"
 
-    return BASE_DIR / "data" / "reply_site.db"
+    return f"sqlite:///{BASE_DIR / 'data' / 'reply_site.db'}"
 
 
-DB_PATH = resolve_db_path()
+DATABASE_URL = resolve_database_url()
+engine = create_engine(DATABASE_URL, future=True)
+
+
+class Base(DeclarativeBase):
+    pass
+
+
+class Profile(Base):
+    __tablename__ = "profiles"
+    __table_args__ = (
+        UniqueConstraint("app_name", "country", "partner_name", "sequence", name="uq_profile_identity"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    app_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    country: Mapped[str] = mapped_column(String(255), nullable=False)
+    partner_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    sequence: Mapped[str] = mapped_column(String(255), nullable=False)
+    conversation_db: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[object] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[object] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
 
 def get_settings() -> dict:
@@ -68,33 +101,28 @@ def load_self_profile() -> str:
 
 
 def init_db() -> None:
-    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with sqlite3.connect(DB_PATH) as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS profiles (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                app_name TEXT NOT NULL,
-                country TEXT NOT NULL,
-                partner_name TEXT NOT NULL,
-                sequence TEXT NOT NULL,
-                conversation_db TEXT NOT NULL DEFAULT '',
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(app_name, country, partner_name, sequence)
-            )
-            """
-        )
-        conn.commit()
+    if DATABASE_URL.startswith("sqlite:///"):
+        db_file = Path(DATABASE_URL.replace("sqlite:///", "", 1))
+        db_file.parent.mkdir(parents=True, exist_ok=True)
+    Base.metadata.create_all(engine)
 
 
-def db_connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+def db_session() -> Session:
+    return Session(engine)
 
 
-def profile_key(profile: sqlite3.Row | dict) -> str:
+def profile_to_dict(profile: Profile) -> dict:
+    return {
+        "id": profile.id,
+        "app_name": profile.app_name,
+        "country": profile.country,
+        "partner_name": profile.partner_name,
+        "sequence": profile.sequence,
+        "conversation_db": profile.conversation_db,
+    }
+
+
+def profile_key(profile: dict) -> str:
     return "__".join(
         [
             sanitize_part(profile["app_name"]),
@@ -172,7 +200,7 @@ def replace_last_you_block(database: str, old_reply: str, new_reply: str) -> str
     return database
 
 
-def build_user_prompt(profile: sqlite3.Row, incoming_message: str) -> str:
+def build_user_prompt(profile: dict, incoming_message: str) -> str:
     history = trim_for_prompt(profile["conversation_db"], 12000)
     self_profile = load_self_profile()
     history_block = ""
@@ -202,7 +230,7 @@ def build_user_prompt(profile: sqlite3.Row, incoming_message: str) -> str:
     )
 
 
-def generate_reply(profile: sqlite3.Row, incoming_message: str) -> dict:
+def generate_reply(profile: dict, incoming_message: str) -> dict:
     settings = get_settings()
     if not settings["api_key"]:
         raise RuntimeError("OPENAI_API_KEY が未設定です。.env を確認してください。")
@@ -242,7 +270,7 @@ def generate_reply(profile: sqlite3.Row, incoming_message: str) -> dict:
     }
 
 
-def retranslate_from_japanese(profile: sqlite3.Row, incoming_message: str, edited_japanese: str) -> dict:
+def retranslate_from_japanese(profile: dict, incoming_message: str, edited_japanese: str) -> dict:
     settings = get_settings()
     if not settings["api_key"]:
         raise RuntimeError("OPENAI_API_KEY が未設定です。.env を確認してください。")
@@ -367,18 +395,20 @@ def extract_profile_from_image(image_bytes: bytes, filename: str) -> dict:
     }
 
 
-def fetch_profiles() -> list[sqlite3.Row]:
-    with db_connection() as conn:
-        return conn.execute(
-            "SELECT * FROM profiles ORDER BY app_name, country, partner_name, sequence"
-        ).fetchall()
+def fetch_profiles() -> list[dict]:
+    with db_session() as session:
+        profiles = session.execute(
+            select(Profile).order_by(Profile.app_name, Profile.country, Profile.partner_name, Profile.sequence)
+        ).scalars().all()
+        return [profile_to_dict(profile) for profile in profiles]
 
 
-def fetch_profile(profile_id: int | None) -> sqlite3.Row | None:
+def fetch_profile(profile_id: int | None) -> dict | None:
     if not profile_id:
         return None
-    with db_connection() as conn:
-        return conn.execute("SELECT * FROM profiles WHERE id = ?", (profile_id,)).fetchone()
+    with db_session() as session:
+        profile = session.get(Profile, profile_id)
+        return profile_to_dict(profile) if profile else None
 
 
 @app.get("/")
@@ -487,27 +517,24 @@ def save_profile():
         return redirect(url_for("index", profile_id=profile_id or ""))
 
     try:
-        with db_connection() as conn:
+        with db_session() as session:
             if profile_id:
-                conn.execute(
-                    """
-                    UPDATE profiles
-                    SET app_name = ?, country = ?, partner_name = ?, sequence = ?, conversation_db = ?, updated_at = CURRENT_TIMESTAMP
-                    WHERE id = ?
-                    """,
-                    (app_name, country, partner_name, sequence, conversation_db, profile_id),
-                )
+                profile = session.get(Profile, profile_id)
+                if not profile:
+                    flash("プロフィールが見つかりません。", "error")
+                    return redirect(url_for("index"))
             else:
-                cursor = conn.execute(
-                    """
-                    INSERT INTO profiles (app_name, country, partner_name, sequence, conversation_db)
-                    VALUES (?, ?, ?, ?, ?)
-                    """,
-                    (app_name, country, partner_name, sequence, conversation_db),
-                )
-                profile_id = cursor.lastrowid
-            conn.commit()
-    except sqlite3.IntegrityError:
+                profile = Profile()
+                session.add(profile)
+
+            profile.app_name = app_name
+            profile.country = country
+            profile.partner_name = partner_name
+            profile.sequence = sequence
+            profile.conversation_db = conversation_db
+            session.commit()
+            profile_id = profile.id
+    except IntegrityError:
         flash(
             "同じ App Name / Country / Partner Name / Sequence のプロフィールがすでにあります。Sequence を変えるか、既存プロフィールを編集してください。",
             "error",
@@ -577,16 +604,11 @@ def generate():
         result["reply"],
     )
 
-    with db_connection() as conn:
-        conn.execute(
-            """
-            UPDATE profiles
-            SET conversation_db = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?
-            """,
-            (updated_db, profile_id),
-        )
-        conn.commit()
+    with db_session() as session:
+        profile = session.get(Profile, profile_id)
+        if profile:
+            profile.conversation_db = updated_db
+            session.commit()
 
     selected_profile = fetch_profile(profile_id)
     flash("返信を生成し、会話DBに追記しました。", "success")
@@ -655,16 +677,11 @@ def retranslate():
 
     updated_db = replace_last_you_block(selected_profile["conversation_db"], previous_reply, result["reply"])
     if updated_db != selected_profile["conversation_db"]:
-        with db_connection() as conn:
-            conn.execute(
-                """
-                UPDATE profiles
-                SET conversation_db = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?
-                """,
-                (updated_db, profile_id),
-            )
-            conn.commit()
+        with db_session() as session:
+            profile = session.get(Profile, profile_id)
+            if profile:
+                profile.conversation_db = updated_db
+                session.commit()
         selected_profile = fetch_profile(profile_id)
 
     flash("日本語の微調整内容を相手の言語へ再翻訳しました。", "success")

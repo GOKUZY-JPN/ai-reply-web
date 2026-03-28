@@ -132,6 +132,7 @@ OPENAI_MODEL=gpt-5-mini
 OPENAI_VISION_MODEL=gpt-4.1-mini
 OPENAI_TEMPERATURE=0.7
 FLASK_SECRET_KEY=十分長いランダム文字列
+DATABASE_URL=Railway が発行した Postgres URL
 DATABASE_PATH=/data/reply_site.db
 ```
 
@@ -159,6 +160,16 @@ DATABASE_PATH=/data/reply_site.db
 これで SQLite ファイルが Volume 上に保存され、再デプロイ後も残ります。
 
 Google Sheets よりこの方法の方が簡単です。構成もほぼ変えず、今の Web アプリのまま使えます。
+
+### さらに確実に残したいなら Railway Postgres
+
+今のアプリは `DATABASE_URL` がある場合、自動で Postgres を使います。Railway で Postgres を追加して、その接続URLを `DATABASE_URL` として渡せば、再デプロイでもプロフィールDBと会話DBは消えません。
+
+おすすめ優先順位:
+
+1. **Railway Postgres**
+2. Railway Volume + SQLite
+3. Google Sheets
 
 ### スクショからプロフィール取り込み
 
