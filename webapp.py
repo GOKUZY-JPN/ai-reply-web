@@ -270,6 +270,37 @@ def generate_reply(profile: dict, incoming_message: str) -> dict:
     }
 
 
+def translate_message_to_japanese(incoming_message: str) -> str:
+    settings = get_settings()
+    if not settings["api_key"]:
+        raise RuntimeError("OPENAI_API_KEY が未設定です。.env を確認してください。")
+
+    client = OpenAI(api_key=settings["api_key"])
+    request_payload = {
+        "model": settings["model"],
+        "input": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": (
+                            "次のメッセージを自然な日本語に翻訳してください。"
+                            "説明は不要で、翻訳文だけを返してください。\n\n"
+                            f"{incoming_message}"
+                        ),
+                    }
+                ],
+            }
+        ],
+    }
+    if supports_temperature(settings["model"]):
+        request_payload["temperature"] = settings["temperature"]
+
+    response = client.responses.create(**request_payload)
+    return response.output_text.strip()
+
+
 def retranslate_from_japanese(profile: dict, incoming_message: str, edited_japanese: str) -> dict:
     settings = get_settings()
     if not settings["api_key"]:
@@ -423,6 +454,7 @@ def index():
         selected_profile=selected_profile,
         result=None,
         incoming_message="",
+        translated_message="",
         current_profile_key=profile_key(selected_profile) if selected_profile else "",
         profile_key_fn=profile_key,
         imported_profile=None,
@@ -445,6 +477,7 @@ def import_profile_image():
             selected_profile=selected_profile,
             result=None,
             incoming_message="",
+            translated_message="",
             current_profile_key=profile_key(selected_profile) if selected_profile else "",
             profile_key_fn=profile_key,
             imported_profile=None,
@@ -459,6 +492,7 @@ def import_profile_image():
             selected_profile=selected_profile,
             result=None,
             incoming_message="",
+            translated_message="",
             current_profile_key=profile_key(selected_profile) if selected_profile else "",
             profile_key_fn=profile_key,
             imported_profile=None,
@@ -474,6 +508,7 @@ def import_profile_image():
             selected_profile=selected_profile,
             result=None,
             incoming_message="",
+            translated_message="",
             current_profile_key=profile_key(selected_profile) if selected_profile else "",
             profile_key_fn=profile_key,
             imported_profile=None,
@@ -496,9 +531,51 @@ def import_profile_image():
         selected_profile=selected_profile,
         result=None,
         incoming_message="",
+        translated_message="",
         current_profile_key=profile_key(selected_profile) if selected_profile else "",
         profile_key_fn=profile_key,
         imported_profile=imported_profile,
+    )
+
+
+@app.post("/translate-message")
+def translate_message():
+    init_db()
+    profile_id = request.form.get("profile_id", type=int)
+    incoming_message = request.form.get("incoming_message", "").strip()
+    selected_profile = fetch_profile(profile_id)
+    profiles = fetch_profiles()
+
+    if not incoming_message:
+        flash("翻訳したい相手メッセージを入力してください。", "error")
+        return render_template(
+            "index.html",
+            profiles=profiles,
+            selected_profile=selected_profile,
+            result=None,
+            incoming_message="",
+            translated_message="",
+            current_profile_key=profile_key(selected_profile) if selected_profile else "",
+            profile_key_fn=profile_key,
+            imported_profile=None,
+        )
+
+    try:
+        translated_message = translate_message_to_japanese(incoming_message)
+    except Exception as exc:
+        flash(str(exc), "error")
+        translated_message = ""
+
+    return render_template(
+        "index.html",
+        profiles=profiles,
+        selected_profile=selected_profile,
+        result=None,
+        incoming_message=incoming_message,
+        translated_message=translated_message,
+        current_profile_key=profile_key(selected_profile) if selected_profile else "",
+        profile_key_fn=profile_key,
+        imported_profile=None,
     )
 
 
@@ -562,13 +639,14 @@ def generate():
         return render_template(
             "index.html",
             profiles=profiles,
-        selected_profile=None,
-        result=None,
-        incoming_message=incoming_message,
-        current_profile_key="",
-        profile_key_fn=profile_key,
-        imported_profile=None,
-    )
+            selected_profile=None,
+            result=None,
+            incoming_message=incoming_message,
+            translated_message="",
+            current_profile_key="",
+            profile_key_fn=profile_key,
+            imported_profile=None,
+        )
 
     if not incoming_message:
         flash("相手の新しいメッセージを入力してください。", "error")
@@ -578,6 +656,7 @@ def generate():
             selected_profile=selected_profile,
             result=None,
             incoming_message="",
+            translated_message="",
             current_profile_key=profile_key(selected_profile),
             profile_key_fn=profile_key,
             imported_profile=None,
@@ -593,6 +672,7 @@ def generate():
             selected_profile=selected_profile,
             result=None,
             incoming_message=incoming_message,
+            translated_message="",
             current_profile_key=profile_key(selected_profile),
             profile_key_fn=profile_key,
             imported_profile=None,
@@ -618,6 +698,7 @@ def generate():
         selected_profile=selected_profile,
         result=result,
         incoming_message=incoming_message,
+        translated_message="",
         current_profile_key=profile_key(selected_profile),
         profile_key_fn=profile_key,
         imported_profile=None,
@@ -642,6 +723,7 @@ def retranslate():
             selected_profile=None,
             result=None,
             incoming_message=incoming_message,
+            translated_message="",
             current_profile_key="",
             profile_key_fn=profile_key,
             imported_profile=None,
@@ -655,6 +737,7 @@ def retranslate():
             selected_profile=selected_profile,
             result=None,
             incoming_message=incoming_message,
+            translated_message="",
             current_profile_key=profile_key(selected_profile),
             profile_key_fn=profile_key,
             imported_profile=None,
@@ -670,6 +753,7 @@ def retranslate():
             selected_profile=selected_profile,
             result=None,
             incoming_message=incoming_message,
+            translated_message="",
             current_profile_key=profile_key(selected_profile),
             profile_key_fn=profile_key,
             imported_profile=None,
@@ -691,6 +775,7 @@ def retranslate():
         selected_profile=selected_profile,
         result=result,
         incoming_message=incoming_message,
+        translated_message="",
         current_profile_key=profile_key(selected_profile),
         profile_key_fn=profile_key,
         imported_profile=None,

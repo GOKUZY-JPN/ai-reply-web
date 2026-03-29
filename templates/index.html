@@ -249,6 +249,23 @@
           <hr style="border:none;border-top:1px solid var(--line);margin:20px 0;" />
 
           <h2>Generate Reply</h2>
+          <form method="post" action="{{ url_for('translate_message') }}">
+            <input type="hidden" name="profile_id" value="{{ selected_profile['id'] if selected_profile else '' }}" />
+            <div class="field">
+              <label>Incoming Message</label>
+              <textarea name="incoming_message" placeholder="相手の新しいメッセージをコピペ">{{ incoming_message }}</textarea>
+            </div>
+            <button type="submit" class="secondary">相手メッセージを日本語訳</button>
+          </form>
+
+          {% if translated_message %}
+            <div class="field" style="margin-top:12px;">
+              <label>Incoming Message Translation</label>
+              <textarea readonly>{{ translated_message }}</textarea>
+            </div>
+          {% endif %}
+
+          <div style="height: 12px;"></div>
           <form method="post" action="{{ url_for('generate') }}">
             <input type="hidden" name="profile_id" value="{{ selected_profile['id'] if selected_profile else '' }}" />
             <div class="field">
