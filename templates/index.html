@@ -189,6 +189,9 @@
       <div class="grid">
         <aside class="panel">
           <h2>Profiles</h2>
+          <a href="{{ url_for('new_profile') }}" style="display:block;margin-bottom:12px;text-decoration:none;">
+            <button type="button">新しいプロフィールを作成</button>
+          </a>
           <div class="profile-list">
             {% for profile in profiles %}
               <a class="profile-card {% if selected_profile and profile['id'] == selected_profile['id'] %}active{% endif %}" href="{{ url_for('index', profile_id=profile['id']) }}">

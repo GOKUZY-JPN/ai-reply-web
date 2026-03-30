@@ -461,6 +461,29 @@ def index():
     )
 
 
+@app.get("/profiles/new")
+def new_profile():
+    init_db()
+    return render_template(
+        "index.html",
+        profiles=fetch_profiles(),
+        selected_profile=None,
+        result=None,
+        incoming_message="",
+        translated_message="",
+        current_profile_key="",
+        profile_key_fn=profile_key,
+        imported_profile={
+            "id": None,
+            "app_name": "Tandem",
+            "country": "",
+            "partner_name": "",
+            "sequence": "1",
+            "conversation_db": "",
+        },
+    )
+
+
 @app.post("/profiles/import-image")
 def import_profile_image():
     init_db()
