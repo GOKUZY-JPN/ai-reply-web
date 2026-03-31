@@ -301,6 +301,76 @@ def translate_message_to_japanese(incoming_message: str) -> str:
     return response.output_text.strip()
 
 
+def score_reply(profile: dict, incoming_message: str, reply_text: str, japanese_translation: str) -> dict:
+    settings = get_settings()
+    if not settings["api_key"]:
+        raise RuntimeError("OPENAI_API_KEY が未設定です。.env を確認してください。")
+
+    reference_guide = load_reference_guide()
+    self_profile = load_self_profile()
+    history = trim_for_prompt(profile["conversation_db"], 12000)
+    history_block = f"過去会話DB:\n{history}\n\n" if history else ""
+    self_profile_block = f"自己プロフィール:\n{self_profile}\n\n" if self_profile else ""
+
+    client = OpenAI(api_key=settings["api_key"])
+    request_payload = {
+        "model": settings["model"],
+        "input": [
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": (
+                            "あなたは厳しめの返信評価者です。"
+                            "評価基準は、与えられた方針文にどれだけ忠実か、相手への配慮、自然さ、会話の連続性、"
+                            "自己開示の正確性、質問数制約の遵守です。甘く採点しないでください。"
+                            "必ずJSONで返し、keysは overall_score, rubric, strengths, issues, advice のみ。"
+                            "overall_score は 0-100 の整数。rubric は object で empathy, naturalness, continuity, self_disclosure, policy_fit, question_limit を各0-100整数。"
+                            "strengths, issues, advice は配列で、それぞれ最大3項目。"
+                        ),
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": (
+                            f"方針文:\n{reference_guide}\n\n"
+                            f"{self_profile_block}"
+                            f"{history_block}"
+                            f"相手の新しいメッセージ:\n{incoming_message}\n\n"
+                            f"採点対象の返信:\n{reply_text}\n\n"
+                            f"日本語訳:\n{japanese_translation}\n\n"
+                            "厳密に採点してください。"
+                            "特に、相手中心か、質問が1つ以下か、過去会話と矛盾しないか、自己開示がファイルにある事実だけかを見てください。"
+                        ),
+                    }
+                ],
+            },
+        ],
+    }
+    if supports_temperature(settings["model"]):
+        request_payload["temperature"] = settings["temperature"]
+
+    response = client.responses.create(**request_payload)
+    raw_text = response.output_text.strip()
+    try:
+        parsed = json.loads(raw_text)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"採点結果の解析に失敗しました: {raw_text}") from exc
+
+    return {
+        "overall_score": int(parsed.get("overall_score", 0)),
+        "rubric": parsed.get("rubric", {}) or {},
+        "strengths": parsed.get("strengths", []) or [],
+        "issues": parsed.get("issues", []) or [],
+        "advice": parsed.get("advice", []) or [],
+    }
+
+
 def retranslate_from_japanese(profile: dict, incoming_message: str, edited_japanese: str) -> dict:
     settings = get_settings()
     if not settings["api_key"]:
@@ -802,6 +872,71 @@ def retranslate():
         current_profile_key=profile_key(selected_profile),
         profile_key_fn=profile_key,
         imported_profile=None,
+    )
+
+
+@app.post("/score-reply")
+def score_reply_route():
+    init_db()
+    profile_id = request.form.get("profile_id", type=int)
+    incoming_message = request.form.get("incoming_message", "").strip()
+    reply_text = request.form.get("reply_text", "").strip()
+    japanese_translation = request.form.get("japanese_translation", "").strip()
+    selected_profile = fetch_profile(profile_id)
+    profiles = fetch_profiles()
+
+    result = {
+        "reply": reply_text,
+        "japanese_translation": japanese_translation,
+    }
+
+    if not selected_profile:
+        flash("先にプロフィールを選択してください。", "error")
+        return render_template(
+            "index.html",
+            profiles=profiles,
+            selected_profile=None,
+            result=result,
+            incoming_message=incoming_message,
+            translated_message="",
+            current_profile_key="",
+            profile_key_fn=profile_key,
+            imported_profile=None,
+            score_result=None,
+        )
+
+    if not reply_text:
+        flash("採点する返信文がありません。", "error")
+        return render_template(
+            "index.html",
+            profiles=profiles,
+            selected_profile=selected_profile,
+            result=result,
+            incoming_message=incoming_message,
+            translated_message="",
+            current_profile_key=profile_key(selected_profile),
+            profile_key_fn=profile_key,
+            imported_profile=None,
+            score_result=None,
+        )
+
+    try:
+        score_result = score_reply(selected_profile, incoming_message, reply_text, japanese_translation)
+    except Exception as exc:
+        flash(str(exc), "error")
+        score_result = None
+
+    return render_template(
+        "index.html",
+        profiles=profiles,
+        selected_profile=selected_profile,
+        result=result,
+        incoming_message=incoming_message,
+        translated_message="",
+        current_profile_key=profile_key(selected_profile),
+        profile_key_fn=profile_key,
+        imported_profile=None,
+        score_result=score_result,
     )
 
 

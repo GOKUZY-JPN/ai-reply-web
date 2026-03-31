@@ -287,6 +287,47 @@
               </div>
             </div>
 
+            <form method="post" action="{{ url_for('score_reply_route') }}" style="margin-top:12px;">
+              <input type="hidden" name="profile_id" value="{{ selected_profile['id'] if selected_profile else '' }}" />
+              <input type="hidden" name="incoming_message" value="{{ incoming_message }}" />
+              <input type="hidden" name="reply_text" value="{{ result['reply'] }}" />
+              <input type="hidden" name="japanese_translation" value="{{ result['japanese_translation'] }}" />
+              <button type="submit" class="secondary">この返信を採点する</button>
+            </form>
+
+            {% if score_result %}
+              <div class="result-grid" style="margin-top:12px;">
+                <div class="field">
+                  <label>Overall Score</label>
+                  <div class="chip">{{ score_result['overall_score'] }}/100</div>
+                </div>
+                <div class="field">
+                  <label>Rubric</label>
+                  <textarea readonly>empathy: {{ score_result['rubric'].get('empathy', '') }}
+naturalness: {{ score_result['rubric'].get('naturalness', '') }}
+continuity: {{ score_result['rubric'].get('continuity', '') }}
+self_disclosure: {{ score_result['rubric'].get('self_disclosure', '') }}
+policy_fit: {{ score_result['rubric'].get('policy_fit', '') }}
+question_limit: {{ score_result['rubric'].get('question_limit', '') }}</textarea>
+                </div>
+                <div class="field">
+                  <label>Strengths</label>
+                  <textarea readonly>{% for item in score_result['strengths'] %}- {{ item }}
+{% endfor %}</textarea>
+                </div>
+                <div class="field">
+                  <label>Issues</label>
+                  <textarea readonly>{% for item in score_result['issues'] %}- {{ item }}
+{% endfor %}</textarea>
+                </div>
+                <div class="field">
+                  <label>Advice</label>
+                  <textarea readonly>{% for item in score_result['advice'] %}- {{ item }}
+{% endfor %}</textarea>
+                </div>
+              </div>
+            {% endif %}
+
             <form method="post" action="{{ url_for('retranslate') }}">
               <input type="hidden" name="profile_id" value="{{ selected_profile['id'] if selected_profile else '' }}" />
               <input type="hidden" name="incoming_message" value="{{ incoming_message }}" />
